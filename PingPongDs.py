@@ -13,7 +13,9 @@ class PingPongDs(Device):
     # Attributes to track round trips
     total_roundtrips = 0
     avg_roundtrip_time = 0.0
+    total_roundtrip_time = 0.0
     worst_roundtrip_time = 0.0
+    best_roundtrip_time = 0.0
     connected = 0
 
     last_ping_time = 0.0  # To calculate roundtrip
@@ -30,7 +32,9 @@ class PingPongDs(Device):
         self.pong_device = None
         self.total_roundtrips = 0
         self.avg_roundtrip_time = 0.0
+        self.total_roundtrip_time = 0.0
         self.worst_roundtrip_time = 0.0
+        self.best_roundtrip_time = 0.0
         self.last_ping_time = 0.0
         self.ping_tag = 0
         self.pending_pings = {}
@@ -87,9 +91,12 @@ class PingPongDs(Device):
 
             # Update metrics
             self.total_roundtrips += 1
-            self.avg_roundtrip_time = ((self.avg_roundtrip_time * (self.total_roundtrips - 1)) + roundtrip_time) / self.total_roundtrips
+            self.total_roundtrip_time += roundtrip_time
+            self.avg_roundtrip_time = self.total_roundtrip_time / self.total_roundtrips
             if roundtrip_time > self.worst_roundtrip_time:
                 self.worst_roundtrip_time = roundtrip_time
+            if roundtrip_time < self.best_roundtrip_time or self.best_roundtrip_time == 0:
+                self.best_roundtrip_time = roundtrip_time
 
             current_time = time()
             if current_time - self.last_print_time >= 1.0:  # Throttle output to 1 second
@@ -119,6 +126,11 @@ class PingPongDs(Device):
     def worstRoundtripTime(self):
         """Expose the worst roundtrip time in milliseconds."""
         return self.worst_roundtrip_time
+
+    @attribute(dtype=DevFloat)
+    def bestRoundtripTime(self):
+        """Expose the best roundtrip time in milliseconds."""
+        return self.best_roundtrip_time
 
 
 if __name__ == "__main__":
