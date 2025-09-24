@@ -112,23 +112,23 @@ class PingPongDs(Device):
     def pong(self, ping_tag):
         self.pong_device.ack(ping_tag)  # Send back
 
-    @attribute(dtype=DevLong)
+    @attribute(dtype=DevLong, unit="cnt")
     def totalRoundtrips(self):
         """Expose the total number of roundtrips."""
         return self.total_roundtrips
 
-    @attribute(dtype=DevFloat)
+    @attribute(dtype=DevFloat, unit="ms")
     def avgRoundtripTime(self):
         """Expose the average roundtrip time in milliseconds."""
         return self.avg_roundtrip_time
 
-    @attribute(dtype=DevFloat)
+    @attribute(dtype=DevFloat, unit="ms")
     def worstRoundtripTime(self):
         """Expose the worst roundtrip time in milliseconds."""
         return self.worst_roundtrip_time
 
     @attribute(dtype=DevFloat)
-    def bestRoundtripTime(self):
+    def bestRoundtripTime(self, unit="ms"):
         """Expose the best roundtrip time in milliseconds."""
         return self.best_roundtrip_time
 
