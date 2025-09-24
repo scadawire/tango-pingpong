@@ -16,6 +16,7 @@ class PingPongDs(Device):
     total_roundtrip_time = 0.0
     worst_roundtrip_time = 0.0
     best_roundtrip_time = 0.0
+    last_roundtrip_time = 0.0
     connected = 0
 
     last_ping_time = 0.0  # To calculate roundtrip
@@ -35,6 +36,7 @@ class PingPongDs(Device):
         self.total_roundtrip_time = 0.0
         self.worst_roundtrip_time = 0.0
         self.best_roundtrip_time = 0.0
+        self.last_roundtrip_time = 0.0
         self.last_ping_time = 0.0
         self.ping_tag = 0
         self.pending_pings = {}
@@ -91,6 +93,7 @@ class PingPongDs(Device):
 
             # Update metrics
             self.total_roundtrips += 1
+            self.last_roundtrip_time = roundtrip_time
             self.total_roundtrip_time += roundtrip_time
             self.avg_roundtrip_time = self.total_roundtrip_time / self.total_roundtrips
             if roundtrip_time > self.worst_roundtrip_time:
@@ -117,20 +120,25 @@ class PingPongDs(Device):
         """Expose the total number of roundtrips."""
         return self.total_roundtrips
 
-    @attribute(dtype=DevFloat, unit="ms")
+    @attribute(dtype=DevFloat, unit="ms", format="%8.4f")
     def avgRoundtripTime(self):
         """Expose the average roundtrip time in milliseconds."""
         return self.avg_roundtrip_time
 
-    @attribute(dtype=DevFloat, unit="ms")
+    @attribute(dtype=DevFloat, unit="ms", format="%8.4f")
     def worstRoundtripTime(self):
         """Expose the worst roundtrip time in milliseconds."""
         return self.worst_roundtrip_time
 
-    @attribute(dtype=DevFloat)
-    def bestRoundtripTime(self, unit="ms"):
+    @attribute(dtype=DevFloat, unit="ms", format="%8.4f")
+    def bestRoundtripTime(self):
         """Expose the best roundtrip time in milliseconds."""
         return self.best_roundtrip_time
+
+    @attribute(dtype=DevFloat, unit="ms", format="%8.4f")
+    def lastRoundtripTime(self):
+        """Expose the last roundtrip time in milliseconds."""
+        return self.last_roundtrip_time
 
 
 if __name__ == "__main__":
