@@ -40,11 +40,12 @@ class PingPongDs(Device):
         self.last_ping_time = 0.0
         self.ping_tag = 0
         self.pending_pings = {}
+        self._lock = threading.Lock()
         self.last_print_time = time()  # Initialize the print throttle time
         self.start_time = time()  # Record the start time
         self.reconnect()
         if(self.ping_interval_ms > 0):
-            self.t = threading.Thread(target=self.ping_loop)
+            self.t = threading.Thread(target=self.ping_loop, daemon=True)
             self.t.start()
         self.set_state(DevState.ON)
 
@@ -75,17 +76,24 @@ class PingPongDs(Device):
         if(self.connected == 0):
             self.reconnect()
         if self.pong_device is not None:
-            self.ping_tag += 1  # Increment tag to uniquely identify this ping
+            self.ping_tag = (self.ping_tag + 1) & 0x7FFFFFFF  # wrap within DevLong range
             self.last_ping_time = time()
-            self.pending_pings[self.ping_tag] = self.last_ping_time  # Store ping time for this tag
-            self.pong_device.pong(self.ping_tag)  # Send tag to the other device
+            with self._lock:
+                self.pending_pings[self.ping_tag] = self.last_ping_time
+            try:
+                self.pong_device.pong(self.ping_tag)
+            except Exception as e:
+                with self._lock:
+                    self.pending_pings.pop(self.ping_tag, None)
+                self.error_stream(f"Ping {self.ping_tag} failed: {e}")
 
     @command(dtype_in=DevLong)
     def ack(self, ping_tag):
         """Handle pong, calculate the roundtrip time using the provided tag."""
-        if ping_tag in self.pending_pings:
-            roundtrip_time = (time() - self.pending_pings[ping_tag]) * 1000.0  # Convert to ms
-            del self.pending_pings[ping_tag]  # Remove the completed ping from the dictionary
+        with self._lock:
+            send_time = self.pending_pings.pop(ping_tag, None)
+        if send_time is not None:
+            roundtrip_time = (time() - send_time) * 1000.0  # Convert to ms
 
             # skip initial stats, since can be distorted
             if time() - self.start_time < 5:
@@ -113,7 +121,10 @@ class PingPongDs(Device):
 
     @command(dtype_in=DevLong)
     def pong(self, ping_tag):
-        self.pong_device.ack(ping_tag)  # Send back
+        if self.pong_device is not None:
+            self.pong_device.ack(ping_tag)
+        else:
+            self.error_stream(f"Cannot send ack for tag {ping_tag}: not connected")
 
     @attribute(dtype=DevLong, unit="cnt")
     def totalRoundtrips(self):
