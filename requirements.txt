@@ -1,1 +1,1 @@
-pytango==10.0.0
+pytango==9.3.2
