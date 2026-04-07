@@ -66,14 +66,6 @@ class PingPongDs(Device):
                 self.info_stream(f"CORBA IOR: {self.pong_device.dev_name()}")
                 self.info_stream(f"Adm name: {self.pong_device.adm_name()}")
 
-                # The raw IOR string tells you the transport
-                ior = self.pong_device.get_device_info().ior
-                if "unix" in ior.lower() or "omni-" in ior:
-                    self.info_stream("Transport: UNIX domain socket")
-                else:
-                    self.info_stream("Transport: TCP")
-                    self.info_stream(f"IOR snippet: {ior[:200]}")
-
                 self.connected = 1
             except Exception as e:
                 self.error_stream(f"Failed to connect to pong device {self.pong_device_name}: {e}")
