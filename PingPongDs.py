@@ -23,7 +23,8 @@ class PingPongDs(Device):
     last_ping_time = 0.0  # To calculate roundtrip
     ping_tag = 0  # To tag each roundtrip uniquely
     pending_pings = {}  # Dictionary to store pending pings with tags
-    t = 0
+    thread_ping_loop = 0
+    thread_print_loop = 0
     start_time = 0
 
     def init_device(self):
@@ -45,8 +46,10 @@ class PingPongDs(Device):
         self.start_time = time()  # Record the start time
         self.reconnect()
         if(self.ping_interval_ms > 0):
-            self.t = threading.Thread(target=self.ping_loop, daemon=True)
-            self.t.start()
+            self.thread_ping_loop = threading.Thread(target=self.ping_loop, daemon=True)
+            self.thread_print_loop = threading.Thread(target=self.print_loop, daemon=True)
+            self.thread_ping_loop.start()
+            self.thread_print_loop.start()
         # optimize lock contention
         util = tango.Util.instance()
         util.set_serial_model(tango.SerialModel.NO_SYNC)
