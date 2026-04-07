@@ -5,6 +5,7 @@ from tango.server import run
 import tango
 import threading
 import os
+from tango import EnsureOmniThread
 
 class PingPongDs(Device):
     pong_device_name = device_property(dtype=str, default_value="")
@@ -23,7 +24,6 @@ class PingPongDs(Device):
     ping_tag = 0  # To tag each roundtrip uniquely
     pending_pings = {}  # Dictionary to store pending pings with tags
     t = 0
-    last_print_time = 0
     start_time = 0
 
     def init_device(self):
@@ -41,12 +41,16 @@ class PingPongDs(Device):
         self.ping_tag = 0
         self.pending_pings = {}
         self._lock = threading.Lock()
-        self.last_print_time = time()  # Initialize the print throttle time
+        self.last_tag = 0  # Initialize the print throttle time
         self.start_time = time()  # Record the start time
         self.reconnect()
         if(self.ping_interval_ms > 0):
             self.t = threading.Thread(target=self.ping_loop, daemon=True)
             self.t.start()
+        # optimize lock contention
+        util = tango.Util.instance()
+        util.set_serial_model(tango.SerialModel.NO_SYNC)
+
         self.set_state(DevState.ON)
 
     def reconnect(self):
@@ -57,17 +61,43 @@ class PingPongDs(Device):
                 self.info_stream(f"Successfully connected to {self.pong_device_name}")
                 available_commands = self.pong_device.command_list_query()
                 self.info_stream(f"Available commands on {self.pong_device_name}: {available_commands}")
+
+                # This shows the actual connection details
+                self.info_stream(f"CORBA IOR: {self.pong_device.dev_name()}")
+                self.info_stream(f"Adm name: {self.pong_device.adm_name()}")
+
+                # The raw IOR string tells you the transport
+                ior = self.pong_device.get_device_info().ior
+                if "unix" in ior.lower() or "omni-" in ior:
+                    self.info_stream("Transport: UNIX domain socket")
+                else:
+                    self.info_stream("Transport: TCP")
+                    self.info_stream(f"IOR snippet: {ior[:200]}")
+
                 self.connected = 1
             except Exception as e:
                 self.error_stream(f"Failed to connect to pong device {self.pong_device_name}: {e}")
 
     def ping_loop(self):
         """Ping loop to regularly ping the other device."""
+        sleepInterval = self.ping_interval_ms / 1000.0
+        with EnsureOmniThread():
+            while True:
+                try:
+                    self.trigger_ping()
+                except Exception as e:
+                    self.error_stream(f"Error in ping loop: {e}")
+                sleep(sleepInterval)  # Convert ms to seconds
+
+    def print_loop(self):
         while True:
             try:
-                self.trigger_ping()
+                self.info_stream(f"Roundtrip #{self.last_tag} time: {round(self.last_roundtrip_time, 4)} ms, "
+                             f"Total: {self.total_roundtrips}, "
+                             f"Avg: {round(self.avg_roundtrip_time, 4)} ms, "
+                             f"Worst: {round(self.worst_roundtrip_time, 4)} ms")
             except Exception as e:
-                self.error_stream(f"Error in ping loop: {e}")
+                self.error_stream(f"Error in print loop: {e}")
             sleep(self.ping_interval_ms / 1000.0)  # Convert ms to seconds
 
     @command()
@@ -78,13 +108,15 @@ class PingPongDs(Device):
         if self.pong_device is not None:
             self.ping_tag = (self.ping_tag + 1) & 0x7FFFFFFF  # wrap within DevLong range
             self.last_ping_time = time()
-            with self._lock:
-                self.pending_pings[self.ping_tag] = self.last_ping_time
+            # with self._lock:
+            #     self.pending_pings[self.ping_tag] = self.last_ping_time
+            self.pending_pings[self.ping_tag] = self.last_ping_time
             try:
                 self.pong_device.pong(self.ping_tag)
             except Exception as e:
-                with self._lock:
-                    self.pending_pings.pop(self.ping_tag, None)
+                # with self._lock:
+                #     self.pending_pings.pop(self.ping_tag, None)
+                self.pending_pings.pop(self.ping_tag, None)
                 self.error_stream(f"Ping {self.ping_tag} failed: {e}")
 
     @command(dtype_in=DevLong)
@@ -93,10 +125,11 @@ class PingPongDs(Device):
         with self._lock:
             send_time = self.pending_pings.pop(ping_tag, None)
         if send_time is not None:
-            roundtrip_time = (time() - send_time) * 1000.0  # Convert to ms
+            current_time = time()
+            roundtrip_time = (current_time - send_time) * 1000.0  # Convert to ms
 
             # skip initial stats, since can be distorted
-            if time() - self.start_time < 5:
+            if current_time - self.start_time < 5:
                 return
 
             # Update metrics
@@ -108,14 +141,6 @@ class PingPongDs(Device):
                 self.worst_roundtrip_time = roundtrip_time
             if roundtrip_time < self.best_roundtrip_time or self.best_roundtrip_time == 0:
                 self.best_roundtrip_time = roundtrip_time
-
-            current_time = time()
-            if current_time - self.last_print_time >= 1.0:  # Throttle output to 1 second
-                self.last_print_time = current_time
-                self.info_stream(f"Roundtrip {ping_tag} time: {round(roundtrip_time, 4)} ms, "
-                                 f"Total: {self.total_roundtrips}, "
-                                 f"Avg: {round(self.avg_roundtrip_time, 4)} ms, "
-                                 f"Worst: {round(self.worst_roundtrip_time, 4)} ms")
         else:
             self.error_stream(f"Received pong with unknown tag: {ping_tag}")
 
