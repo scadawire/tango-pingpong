@@ -85,15 +85,16 @@ class PingPongDs(Device):
                 sleep(sleepInterval)  # Convert ms to seconds
 
     def print_loop(self):
-        while True:
-            try:
-                self.info_stream(f"Roundtrip #{self.last_tag} time: {round(self.last_roundtrip_time, 4)} ms, "
-                             f"Total: {self.total_roundtrips}, "
-                             f"Avg: {round(self.avg_roundtrip_time, 4)} ms, "
-                             f"Worst: {round(self.worst_roundtrip_time, 4)} ms")
-            except Exception as e:
-                self.error_stream(f"Error in print loop: {e}")
-            sleep(self.ping_interval_ms / 1000.0)  # Convert ms to seconds
+        with EnsureOmniThread():
+            while True:
+                try:
+                    self.info_stream(f"Roundtrip #{self.last_tag} time: {round(self.last_roundtrip_time, 4)} ms, "
+                                 f"Total: {self.total_roundtrips}, "
+                                 f"Avg: {round(self.avg_roundtrip_time, 4)} ms, "
+                                 f"Worst: {round(self.worst_roundtrip_time, 4)} ms")
+                except Exception as e:
+                    self.error_stream(f"Error in print loop: {e}")
+                sleep(3)  # every 3 seconds
 
     @command()
     def trigger_ping(self):
